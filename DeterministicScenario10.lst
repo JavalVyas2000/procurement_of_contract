@@ -1,0 +1,3807 @@
+GAMS 36.1.0  r2c0a44a Released Aug  2, 2021 WEX-WEI x86 64bit/MS Windows - 04/28/23 05:59:23 Page 1
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+   1  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+   2  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+   3  *
+   4  * DOWNLOADED FROM MINLP CYBER-INFRASTRUCTURE
+   5  * www.minlp.org
+   6  *
+   7  * PROBLEM : Production Planning with Contract Selection and Price Optimization: Constant-Elasticity and Logit DRMs
+   8  *
+   9  * EXAMPLE : Motivating
+  10  *
+  11  * AUTHOR(S) : Bruno Calfa, Ignacio Grossmann
+  12  *
+  13  * SUBMITTED BY : Bruno Calfa
+  14  *
+  15  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+  16  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+  17   
+  18   
+  22   
+  27   
+  32   
+  33   
+  34  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+  35  *                                                                                       Model v.1: Constant-Elasticity                                                                                            *
+  36  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+  37   
+  38  * * * * * * * * * * * * * * * * *  *
+  39  * Production Planning Declarations *
+  40  * * * * * * * * * * * * * * * * *  *
+  41  SETS
+  42          I               Processes       /P1,P2,P3/
+  43          J               Chemicals       /A,B,C,D/
+  44          S               Sites   /S1/
+  45          Ij(i,j) Processes that consume chemical j
+  46          Oj(i,j) Processes that produce chemical j
+  47          Ji(j,i) Chemicals involved in process i
+  48          JM(i,j) Main products of process i
+  49          IS(i,s) Mapping of processes to sites
+  50          JP(j)   Products
+  51          JR(j)   Raw materials
+  52          T               Time periods    /1*6/
+  53          K               Scenarios       /1*10/
+  54  ;
+  55  alias(j,jj);
+  56  alias(s,ss);
+  57  alias(t,tt);
+  58  alias(k,kk);
+  59  alias(t,tt);
+  60   
+  61  Ij(i,j) = no;
+  62  Ij('P1','A') = yes;
+  63  Ij('P2','B') = yes;
+  64  Ij('P3','B') = yes;
+  65  Oj(i,j) = no;
+  66  Oj('P1','B') = yes;
+  67  Oj('P2','C') = yes;
+  68  Oj('P3','D') = yes;
+  69  Ji(j,i) = no;
+  70  Ji('A','P1') = yes;
+  71  Ji('B','P1') = yes;
+  72  Ji('B','P2') = yes;
+  73  Ji('C','P2') = yes;
+  74  Ji('B','P3') = yes;
+  75  Ji('D','P3') = yes;
+  76  JM(i,j) = no;
+  77  JM('P1','B') = yes;
+  78  JM('P2','C') = yes;
+  79  JM('P3','D') = yes;
+  80  IS(i,s) = yes;
+  81  JP(j) = no;
+  82  JP('C') = yes;
+  83  JP('D') = yes;
+  84  JR(j) = no;
+  85  JR('A') = yes;
+  86   
+  87  TABLE   delta(i,s,t)    Operating cost
+  88          1       2       3       4       5       6
+  89  P1.S1   0.26    0.26    0.26    0.14    0.14    0.14
+  90  P2.S1   0.16    0.16    0.16    0.13    0.13    0.13
+  91  P3.S1   0.32    0.32    0.32    0.32    0.32    0.32
+  92  ;
+  93   
+  94  PARAMETER       xi(j,s,t)       Inventory cost;
+  95  xi('D','S1',t) = 0.03;
+  96   
+  97  PARAMETER       eta(j,s,ss,t)   Intersite transfer cost;
+  98  eta(j,s,ss,t) = 0;
+  99   
+ 100  TABLE   mu(i,j,s)       Mass factor
+ 101          S1
+ 102  P1.A    0.83
+ 103  P1.B    -1
+ 104  P2.B    0.95
+ 105  P2.C    -1
+ 106  P3.B    1.11
+ 107  P3.D    -1
+ 108  ;
+ 109   
+ 110  PARAMETER       Q(i,s,t)        Process capacity;
+ 111  Q('P1','S1',t) = 85;
+ 112  Q('P2','S1',t) = 35;
+ 113  Q('P3','S1',t) = 65;
+ 114   
+ 115  PARAMETER       aL(j,s,t)       Raw material availability lower;
+ 116  aL('A','S1',t) = 0;
+ 117   
+ 118  PARAMETER       aU(j,s,t)       Raw material availability upper;
+ 119  aU('A','S1',t) = 60;
+ 120   
+ 121  PARAMETER       VU(j,s,t)       Inventory capacity;
+ 122  VU('D','S1',t) = 6;
+ 123   
+ 124  PARAMETER       FU(j,s,ss,t)    Intersite transfer limit;
+ 125  FU(j,s,ss,t) = 0;
+ 126   
+ 127  PARAMETER       HasDemand(j,t)  Flag to denote if material j has demand;
+ 128  HasDemand('C',t) = 1;
+ 129  HasDemand('D',t) = 1;
+ 130   
+ 131  PARAMETER       alphaspot(j,s,t,k)      Purchase spot price;
+ 132  alphaspot('A','S1','1','1') = 1.37455;  alphaspot('A','S1','1','2') = 2.472633; alphaspot('A','S1','1','3') = 4.976822; alphaspot('A','S1','1','4') = 2.565652; alphaspot('A','S1','1','5') = 3.356331; alphaspot('A','S1','1','6') = 1.44013616;       alphaspot('A','S1','1','7') = 1.959312; alphaspot('A','S1','1','8') = 2.5554035;        alphaspot('A','S1','1','9') = 6.121276; alphaspot('A','S1','1','10') = 2.268122;
+ 133  alphaspot('A','S1','2','1') = 4.020626; alphaspot('A','S1','2','2') = 2.964906; alphaspot('A','S1','2','3') = 4.504642; alphaspot('A','S1','2','4') = 3.200062; alphaspot('A','S1','2','5') = 2.624108; alphaspot('A','S1','2','6') = 0.04478201;       alphaspot('A','S1','2','7') = 3.275987; alphaspot('A','S1','2','8') = 0.9265037;        alphaspot('A','S1','2','9') = 3.760758; alphaspot('A','S1','2','10') = 3.826681;
+ 134  alphaspot('A','S1','3','1') = 5.974445; alphaspot('A','S1','3','2') = 2.597016; alphaspot('A','S1','3','3') = 4.248418; alphaspot('A','S1','3','4') = 4.934691; alphaspot('A','S1','3','5') = 5.99296;  alphaspot('A','S1','3','6') = 0.68209498;       alphaspot('A','S1','3','7') = 2.410622; alphaspot('A','S1','3','8') = 2.4881944;        alphaspot('A','S1','3','9') = 7.781311; alphaspot('A','S1','3','10') = 7.257567;
+ 135  alphaspot('A','S1','4','1') = 1.012926; alphaspot('A','S1','4','2') = 2.996514; alphaspot('A','S1','4','3') = 3.493567; alphaspot('A','S1','4','4') = 3.433273; alphaspot('A','S1','4','5') = 4.120419; alphaspot('A','S1','4','6') = 1.90055992;       alphaspot('A','S1','4','7') = 2.112299; alphaspot('A','S1','4','8') = 1.4857817;        alphaspot('A','S1','4','9') = 4.199485; alphaspot('A','S1','4','10') = 3.512231;
+ 136  alphaspot('A','S1','5','1') = 5.547826; alphaspot('A','S1','5','2') = 3.024617; alphaspot('A','S1','5','3') = 4.285229; alphaspot('A','S1','5','4') = 2.960692; alphaspot('A','S1','5','5') = 4.627118; alphaspot('A','S1','5','6') = 2.6051957;        alphaspot('A','S1','5','7') = 2.520239; alphaspot('A','S1','5','8') = 2.207549; alphaspot('A','S1','5','9') = 7.75634;  alphaspot('A','S1','5','10') = 8.229719;
+ 137  alphaspot('A','S1','6','1') = 5.486787; alphaspot('A','S1','6','2') = 2.461346; alphaspot('A','S1','6','3') = 8.845282; alphaspot('A','S1','6','4') = 5.157271; alphaspot('A','S1','6','5') = 4.191177; alphaspot('A','S1','6','6') = 5.13465497;       alphaspot('A','S1','6','7') = 1.290353; alphaspot('A','S1','6','8') = 2.683989; alphaspot('A','S1','6','9') = 10.832325;        alphaspot('A','S1','6','10') = 8.466163;
+ 138   
+ 139  PARAMETER       prob(k) Scenario probability;
+ 140  prob('1') = 0.000;
+ 141  prob('2') = 0.000;
+ 142  prob('3') = 0.000;
+ 143  prob('4') = 0.000;
+ 144  prob('5') = 0.000;
+ 145  prob('6') = 0.000;
+ 146  prob('7') = 0.000;
+ 147  prob('8') = 0.000;
+ 148  prob('9') = 0.000;
+ 149  prob('10') = 1.00;
+ 150   
+ 151  PARAMETER       epsilon(j,k)    Regression residual;
+ 152  epsilon('C','1') = -0.17779;    epsilon('C','2') = -0.1699941;  epsilon('C','3') = -1.3723019;  epsilon('C','4') = -0.1737872;  epsilon('C','5') = 0.8502323;   epsilon('C','6') = 0.6976087;   epsilon('C','7') = 0.5499974;   epsilon('C','8') = -0.402732;   epsilon('C','9') = -0.1915938;  epsilon('C','10') = -1.1945279;
+ 153  epsilon('D','1') = -0.1063176;  epsilon('D','2') = 0.510392;    epsilon('D','3') = 3.411928;    epsilon('D','4') = 2.0030265;   epsilon('D','5') = -0.9911669;  epsilon('D','6') = 0.7111006;   epsilon('D','7') = -2.2692161;  epsilon('D','8') = 1.7564073;   epsilon('D','9') = 1.9458335;   epsilon('D','10') = 4.2422342;
+ 154   
+ 155   
+ 156  * * * * * * * *  *
+ 157  * Contracts Data *
+ 158  * * * * * * * *  *
+ 159  SETS
+ 160          C       Contract types  /d,b,l/
+ 161          CS      Contract scheme /1*2/
+ 162          CL      Contract length /1*3/
+ 163  ;
+ 164  alias(cl,cll);
+ 165   
+ 166  PARAMETER       phid(j,s,t,cs)  Purchase price for discount contract;
+ 167  phid(j,'S1',t,'1') $ JR(j) = 1.85;
+ 168  phid(j,'S1',t,'2') $ JR(j) = 1.45;
+ 169  phid(j,s,t,cs) = 1.7*phid(j,s,t,cs);
+ 170   
+ 171  PARAMETER       phib(j,s,t,cs)  Purchase price for bulk discount contract;
+ 172  phib(j,'S1',t,'1') $ JR(j) = 1.8;
+ 173  phib(j,'S1',t,'2') $ JR(j) = 1.4;
+ 174  phib(j,s,t,cs) = 1.7*phib(j,s,t,cs);
+ 175   
+ 176  PARAMETER       phil(j,s,t,cl)  Purchase price for fixed duration contract;
+ 177  phil(j,'S1',t,'1') $ JR(j) = 2;
+ 178  phil(j,'S1',t,'2') $ JR(j) = 1.2;
+ 179  phil(j,'S1',t,'3') $ JR(j) = 1;
+ 180  phil(j,s,t,cl) = 1.7*phil(j,s,t,cl);
+ 181   
+ 182  PARAMETER       sigmad(j,s,t)   Purchase amount threshold for discount contract;
+ 183  sigmad(j,'S1',t) $ JR(j) = 20;
+ 184   
+ 185  PARAMETER       sigmab(j,s,t)   Purchase amount threshold for bulk discount contract;
+ 186  sigmab('A','S1',t) = 40;
+ 187   
+ 188  PARAMETER       sigmal(j,s,t,cl)        Purchase amount threshold for fixed duration contract;
+ 189  sigmal(j,'S1',t,'1') $ JR(j) = 5;
+ 190  sigmal(j,'S1',t,'2') $ JR(j) = 25;
+ 191  sigmal(j,'S1',t,'3') $ JR(j) = 30;
+ 192   
+ 193   
+ 194  * * * * * * * * * * * * * * * * *  *
+ 195  * Pricing Constant-Elasticity Data *
+ 196  * * * * * * * * * * * * * * * * *  *
+ 197   
+ 198  PARAMETER       beta2p(j)       Coefficient of constant-elasticity DRM;
+ 199  beta2p('C') = 10;
+ 200  beta2p('D') = 21;
+ 201   
+ 202  PARAMETER       Ed(j)   Price elasticity in constant-elasticity DRM;
+ 203  Ed('C') = 2;
+ 204  Ed('D') = 1.5;
+ 205   
+ 206   
+ 207  POSITIVE VARIABLES
+ 208          SF(j,s,t)               Sales from site s
+ 209      ST(j,t)                     Total sales
+ 210          W(i,j,s,t,k)    Production rate
+ 211          P(j,s,t,k)              Total purchase amounts
+ 212      Pspot(j,s,t,k)      Purchase amounts from spot market
+ 213          COST(j,s,t,k)   Total purchase cost
+ 214      V(j,s,t,k)          Inventory level
+ 215      F(j,s,ss,t,k)       Intersite transfer flows
+ 216  ;
+ 217   
+ 218  VARIABLES
+ 219          PROFIT
+ 220  ;
+ 221   
+ 222  EQUATIONS
+ 223          SPProcessInputOutput(s,i,j,jj,t,k)      Process input and output relationships
+ 224          SPMaterialBalance(s,j,t,k)                      Material and inventory balance
+ 225      TotalSales(j,t)                                             Aggregate sales from sites
+ 226  ;
+ 227   
+ 228  SPProcessInputOutput(s,i,j,jj,t,k) $ [IS(i,s) and Ji(j,i) and JM(i,jj)]..
+ 229  W(i,j,s,t,k) =E= abs(mu(i,j,s))*W(i,jj,s,t,k);
+ 230   
+ 231  SPMaterialBalance(s,j,t,k)..
+ 232  (V(j,s,t - 1,k) $ VU(j,s,t - 1)) + sum(i $ Oj(i,j), W(i,j,s,t,k)) + (P(j,s,t,k) $ alphaspot(j,s,t,k)) =E=
+ 233  (V(j,s,t,k) $ VU(j,s,t)) + sum(i $ Ij(i,j), W(i,j,s,t,k)) + sum((ss) $ (ord(ss) <> ord(s)), F(j,s,ss,t,k)) + (SF(j,s,t) $ HasDemand(j,t));
+ 234   
+ 235  TotalSales(j,t) $ HasDemand(j,t)..
+ 236  ST(j,t) =E= sum(s, SF(j,s,t));
+ 237   
+ 238   
+ 239  * * * * * * * * * *
+ 240  * Contracts Model *
+ 241  * * * * * * * * * *
+ 242  POSITIVE VARIABLES
+ 243                  COSTc(j,s,t,c)          Purchase cost for contracts
+ 244          Pd(j,s,t)                       Purchase amount for discount contract
+ 245          Pddis1(j,s,t,cs)        Purchase amount for discount contract disjunction 1
+ 246          Pddis2(j,s,t,cs)        Purchase amount for discount contract disjunction 2
+ 247                  Pb(j,s,t)                       Purchase amount for bulk discount contract
+ 248          Pbdis(j,s,t,cs)         Purchase amount for bulk discount contract disjunction
+ 249          Pl(j,s,t)                       Purchase amount for fixed duration contract
+ 250          Pldis(j,s,t,tt,cl)      Purchase amount for fixed duration contract disjunction
+ 251  ;
+ 252   
+ 253  BINARY VARIABLES
+ 254          yd(j,s,t)               Binary variable for discount contract
+ 255          yddis(j,s,t,cs) Binary variable for discount contract disjunction
+ 256      yb(j,s,t)           Binary variable for bulk discount contract
+ 257          ybdis(j,s,t,cs) Binary variable for bulk discount contract disjunction
+ 258          yl(j,s,t)               Binary variable for fixed duration contract
+ 259          yldis(j,s,t,cl) Binary variable for fixed duration contract disjunction
+ 260  ;
+ 261   
+ 262  EQUATIONS
+ 263          SPTotalPurchaseCost(s,j,t,k)                                            Total purchase cost spot market and contracts
+ 264          SPTotalPurchaseAmount(s,j,t,k)                                          Total purchase amount spot market and contracts
+ 265          PurchaseCostBinLogical(s,j,t)                                           Logical constraint for purchase amount from contracts
+ 266          PurchaseCostDiscountContract(s,j,t)                                     Purchase cost from discount contract
+ 267          PurchaseAmountDis1DiscountContract(s,j,t)                       Disaggregation of disjunction variables 1 for discount contract
+ 268          PurchaseAmountDis2DiscountContract(s,j,t)                       Disaggregation of disjunction variables 2 for discount contract
+ 269          PurchaseAmountDiscountDis2UpperBound(s,j,t)                     Upper bound in disjunction 2 for discount contract
+ 270          PurchaseAmountDiscountDis2Equality(s,j,t)                       Equality constraint in disjunction 2 for discount contract
+ 271          PurchaseAmountDiscountDis1UpperBound(s,i,j,t)           Upper bound in disjunction 1 for discount contract
+ 272          PurchaseAmountDiscountBinLogical(s,j,t)                         Logical constraint for discount contract
+ 273          PurchaseCostBulkContract(s,j,t)                                         Purchase cost from bulk discount contract
+ 274          PurchaseAmountDisBulkContract(s,j,t)                            Disaggregation of disjunction variables for bulk discount contract
+ 275          PurchaseAmountBulkDis1UpperBound(s,j,t)                         Upper bound in disjunction for bulk discount contract
+ 276          PurchaseAmountBulkDis2UpperBound(s,i,j,t)                       Upper bound in disjunction for bulk discount contract
+ 277          PurchaseAmountBulkDis2LowerBound(s,j,t)                         Lower bound in disjunction for bulk discount contract
+ 278          PurchaseAmountBulkBinLogical(s,j,t)                                     Logical constraint for bulk discount contract
+ 279          PurchaseCostLengthContract(s,j,t)                                       Purchase cost from fixed duration contract
+ 280          PurchaseAmountDisLengthContract(s,j,t)                          Disaggregation of disjunction variables for fixed duration contract
+ 281          PurchaseAmountLengthDisUpperBound(s,i,j,t,tt,cl)        Upper bound in disjunction for fixed duration contract
+ 282          PurchaseAmountLengthDisLowerBound(s,j,t,tt,cl)          Lower bound in disjunction for fixed duration contract
+ 283          PurchaseAmountLengthBinLogical(s,j,t)                           Logical constraint 1 for fixed duration contract
+ 284          PurchaseAmountLengthBinLogical2(s,j,t,tt,cl,cll)        Logical constraint 2 for fixed duration contract
+ 285  ;
+ 286   
+ 287  SPTotalPurchaseCost(s,j,t,k) $ JR(j)..
+ 288  COST(j,s,t,k) =E= alphaspot(j,s,t,k)*Pspot(j,s,t,k) + sum(c, COSTc(j,s,t,c));
+ 289   
+ 290  SPTotalPurchaseAmount(s,j,t,k) $ JR(j)..
+ 291  P(j,s,t,k) =E= Pspot(j,s,t,k) + Pd(j,s,t) + Pb(j,s,t) + Pl(j,s,t);
+ 292   
+ 293  PurchaseCostBinLogical(s,j,t) $ JR(j)..
+ 294  yd(j,s,t) + yb(j,s,t) + yl(j,s,t) =L= 1;
+ 295   
+ 296  PurchaseCostDiscountContract(s,j,t) $ JR(j)..
+ 297  COSTc(j,s,t,'d') =E= sum(cs, phid(j,s,t,cs)*Pddis1(j,s,t,cs));
+ 298   
+ 299  PurchaseAmountDis1DiscountContract(s,j,t) $ JR(j)..
+ 300  Pd(j,s,t) =E= sum(cs, Pddis1(j,s,t,cs));
+ 301   
+ 302  PurchaseAmountDis2DiscountContract(s,j,t) $ JR(j)..
+ 303  Pddis1(j,s,t,'1') =E= sum(cs, Pddis2(j,s,t,cs));
+ 304   
+ 305  PurchaseAmountDiscountDis2UpperBound(s,j,t) $ JR(j)..
+ 306  Pddis2(j,s,t,'1') =L= sigmad(j,s,t)*yddis(j,s,t,'1');
+ 307   
+ 308  PurchaseAmountDiscountDis2Equality(s,j,t) $ JR(j)..
+ 309  Pddis2(j,s,t,'2') =E= sigmad(j,s,t)*yddis(j,s,t,'2');
+ 310   
+ 311  PurchaseAmountDiscountDis1UpperBound(s,i,j,t) $ [JR(j) and IS(i,s) and Ji(j,i)]..
+ 312  Pddis1(j,s,t,'2') =L= Q(i,s,t)*yddis(j,s,t,'2');
+ 313   
+ 314  PurchaseAmountDiscountBinLogical(s,j,t) $ JR(j)..
+ 315  sum(cs, yddis(j,s,t,cs)) =E= yd(j,s,t);
+ 316   
+ 317  PurchaseCostBulkContract(s,j,t) $ JR(j)..
+ 318  COSTc(j,s,t,'b') =E= sum(cs, phib(j,s,t,cs)*Pbdis(j,s,t,cs));
+ 319   
+ 320  PurchaseAmountDisBulkContract(s,j,t) $ JR(j)..
+ 321  Pb(j,s,t) =E= sum(cs, Pbdis(j,s,t,cs));
+ 322   
+ 323  PurchaseAmountBulkDis1UpperBound(s,j,t) $ JR(j)..
+ 324  Pbdis(j,s,t,'1') =L= sigmab(j,s,t)*ybdis(j,s,t,'1');
+ 325   
+ 326  PurchaseAmountBulkDis2UpperBound(s,i,j,t) $ [JR(j) and IS(i,s) and Ji(j,i)]..
+ 327  Pbdis(j,s,t,'2') =L= Q(i,s,t)*ybdis(j,s,t,'2');
+ 328   
+ 329  PurchaseAmountBulkDis2LowerBound(s,j,t) $ JR(j)..
+ 330  Pbdis(j,s,t,'2') =G= sigmab(j,s,t)*ybdis(j,s,t,'2');
+ 331   
+ 332  PurchaseAmountBulkBinLogical(s,j,t) $ JR(j)..
+ 333  sum(cs, ybdis(j,s,t,cs)) =E= yb(j,s,t);
+ 334   
+ 335  PurchaseCostLengthContract(s,j,t) $ JR(j)..
+ 336  COSTc(j,s,t,'l') =E= phil(j,s,t,'1')*Pldis(j,s,t,t,'1') + sum((cl,tt) $ ((ord(cl) > 1) and (ord(tt) <= ord(t)) and ((ord(t) - ord(cl) + 1) > 0) and (ord(tt) >= (ord(t) - ord(cl) + 1))), phil(j,s,tt,cl)*Pldis(j,s,t,tt,cl));
+ 337   
+ 338  PurchaseAmountDisLengthContract(s,j,t) $ JR(j)..
+ 339  Pl(j,s,t) =E= Pldis(j,s,t,t,'1') + sum((cl,tt) $ ((ord(cl) > 1) and (ord(tt) <= ord(t)) and ((ord(t) - ord(cl) + 1) > 0) and (ord(tt) >= (ord(t) - ord(cl) + 1))), Pldis(j,s,t,tt,cl));
+ 340   
+ 341  PurchaseAmountLengthDisUpperBound(s,i,j,t,tt,cl) $ [JR(j) and (ord(tt) <= ord(t)) and ((ord(t) - ord(cl) + 1) > 0) and (ord(tt) >= (ord(t) - ord(cl) + 1)) and IS(i,s) and Ji(j,i)]..
+ 342  Pldis(j,s,t,tt,cl) =L= Q(i,s,t)*yldis(j,s,t,cl);
+ 343   
+ 344  PurchaseAmountLengthDisLowerBound(s,j,t,tt,cl) $ [JR(j) and (ord(tt) <= ord(t)) and ((ord(t) - ord(cl) + 1) > 0) and (ord(tt) >= (ord(t) - ord(cl) + 1))]..
+ 345  Pldis(j,s,t,tt,cl) =G= sigmal(j,s,tt,cl)*yldis(j,s,t,cl);
+ 346   
+ 347  PurchaseAmountLengthBinLogical(s,j,t) $ JR(j)..
+ 348  sum(cl, yldis(j,s,t,cl)) =E= yl(j,s,t);
+ 349   
+ 350  PurchaseAmountLengthBinLogical2(s,j,t,tt,cl,cll) $ [JR(j) and (ord(tt) < ord(t)) and ((ord(t) - ord(cl) + 1) > 0) and (ord(tt) >= (ord(t) - ord(cl) + 1))]..
+ 351  yldis(j,s,t,cl) =L= 1 - yldis(j,s,tt,cll);
+ 352   
+ 353   
+ 354  * * * * * * * * * * * * * * * * * * *
+ 355  * Pricing Constant-Elasticity Model *
+ 356  * * * * * * * * * * * * * * * * * * *
+ 357   
+ 358  POSITIVE VARIABLE
+ 359          STaux(j,t)      Auxiliary variable for total sales
+ 360  ;
+ 361   
+ 362  EQUATION
+ 363          STauxcon(j,t)   Constraint to define auxiliary total sales variable
+ 364  ;
+ 365   
+ 366  STauxcon(j,t) $ HasDemand(j,t)..
+ 367  STaux(j,t)**(1/(1 - 1/Ed(j))) =L= ST(j,t);
+ 368   
+ 369  EQUATIONS
+ 370          SPProfit_Purchase_Contracts_Pricing_ConstantElasticity  Objective function for stochastic contracts pricing constant-elasticity DRM
+ 371  ;
+ 372   
+ 373  SPProfit_Purchase_Contracts_Pricing_ConstantElasticity..
+ 374  PROFIT =E=
+ 375  sum(k, prob(k)*
+ 376          (
+ 377                  sum((j,t) $ HasDemand(j,t), beta2p(j)*STaux(j,t) + epsilon(j,k)*ST(j,t)) -
+ 378                  sum((s,j,t) $ alphaspot(j,s,t,k), COST(j,s,t,k)) -
+ 379                  sum((s,i,j,t) $ (IS(i,s) and JM(i,j)), delta(i,s,t)*W(i,j,s,t,k)) -
+ 380                  sum((s,j,t) $ xi(j,s,t), xi(j,s,t)*V(j,s,t,k)) -
+ 381                  sum((s,ss,j,t) $ (eta(j,s,ss,t) and (ord(s) <> ord(ss))), eta(j,s,ss,t)*F(j,s,ss,t,k))
+ 382          )
+ 383  );
+ 384   
+ 385  model   SPConstEla
+ 386  /
+ 387          STauxcon,
+ 388          SPProcessInputOutput,
+ 389          SPMaterialBalance,
+ 390          TotalSales,
+ 391          SPTotalPurchaseCost,
+ 392          SPTotalPurchaseAmount,
+ 393          PurchaseCostBinLogical,
+ 394          PurchaseCostDiscountContract,
+ 395          PurchaseAmountDis1DiscountContract,
+ 396          PurchaseAmountDis2DiscountContract,
+ 397          PurchaseAmountDiscountDis2UpperBound,
+ 398          PurchaseAmountDiscountDis2Equality,
+ 399          PurchaseAmountDiscountDis1UpperBound,
+ 400          PurchaseAmountDiscountBinLogical,
+ 401          PurchaseCostBulkContract,
+ 402          PurchaseAmountDisBulkContract,
+ 403          PurchaseAmountBulkDis1UpperBound,
+ 404          PurchaseAmountBulkDis2UpperBound,
+ 405          PurchaseAmountBulkDis2LowerBound,
+ 406          PurchaseAmountBulkBinLogical,
+ 407          PurchaseCostLengthContract,
+ 408          PurchaseAmountDisLengthContract,
+ 409          PurchaseAmountLengthDisUpperBound,
+ 410          PurchaseAmountLengthDisLowerBound,
+ 411          PurchaseAmountLengthBinLogical,
+ 412          PurchaseAmountLengthBinLogical2,
+ 413          SPProfit_Purchase_Contracts_Pricing_ConstantElasticity
+ 414  /;
+ 415   
+ 416  SPConstEla.optFile = 1;
+ 417   
+ 418  * Bounds and initializations
+ 419  W.up(i,j,s,t,k) $ JM(i,j) = Q(i,s,t);
+ 420  P.lo(j,s,t,k) $ JR(j) = aL(j,s,t);
+ 421  P.up(j,s,t,k) $ JR(j) = aU(j,s,t);
+ 422  V.up(j,s,t,k) = VU(j,s,t);
+ 423  V.fx(j,s,t,k) $ (ord(t) = 1) = 0;
+ 424  F.up(j,s,ss,t,k) $ [(not JR(j)) and (ord(s) <> ord(ss))] = FU(j,s,ss,t);
+ 425  ST.l(j,t) $ HasDemand(j,t) = 1;
+ 426  ST.lo(j,t) $ HasDemand(j,t) = 0.1;
+ 427  STaux.l(j,t) $ HasDemand(j,t) = ST.l(j,t)**(1 - 1/Ed(j));
+ 428  STaux.lo(j,t) $ HasDemand(j,t) = ST.lo(j,t)**(1/(1 - 1/Ed(j)));
+ 429   
+ 430   
+ 431  OPTION MIP = GUROBI;
+ 432  OPTION NLP = CONOPT;
+ 433  OPTION MINLP = DICOPT;
+ 434  *OPTION MINLP = SBB;
+ 435  *OPTION MINLP = ALPHAECP;
+ 436  *OPTION MINLP = BARON;
+ 437  *OPTION MINLP = SCIP;
+ 438   
+ 439  OPTION optcr = 0.001;
+ 440  OPTION reslim = 21600;
+ 441   
+ 442  OPTION solprint = off;
+ 443  OPTION limrow = 0;
+ 444  OPTION limcol = 0;
+ 445  *OPTION sysout = on;
+
+
+COMPILATION TIME     =        0.016 SECONDS      3 MB  36.1.0 r2c0a44a WEX-WEI
+GAMS 36.1.0  r2c0a44a Released Aug  2, 2021 WEX-WEI x86 64bit/MS Windows - 04/28/23 05:59:23 Page 2
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Model Statistics    SOLVE SPConstEla Using MINLP From line 449
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          27     SINGLE EQUATIONS          762
+BLOCKS OF VARIABLES          24     SINGLE VARIABLES          797
+NON ZERO ELEMENTS         2,211     NON LINEAR N-Z             12
+CODE LENGTH                  60     CONSTANT POOL              17     DISCRETE VARIABLES         60
+
+
+GENERATION TIME      =        0.016 SECONDS      4 MB  36.1.0 r2c0a44a WEX-WEI
+GAMS 36.1.0  r2c0a44a Released Aug  2, 2021 WEX-WEI x86 64bit/MS Windows - 04/28/23 05:59:23 Page 3
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE SPConstEla Using MINLP From line 449
+
+
+               S O L V E      S U M M A R Y
+
+     MODEL   SPConstEla          OBJECTIVE  PROFIT
+     TYPE    MINLP               DIRECTION  MAXIMIZE
+     SOLVER  DICOPT              FROM LINE  449
+
+**** SOLVER STATUS     1 Normal Completion
+**** MODEL STATUS      8 Integer Solution
+**** OBJECTIVE VALUE             1193.5214
+
+ RESOURCE USAGE, LIMIT          0.265     21600.000
+ ITERATION COUNT, LIMIT       383    2147483647
+ EVALUATION ERRORS              0             0
+-------------------------------------------------------------------------------
+Dicopt 2         36.1.0 r2c0a44a Released Aug  2, 2021 WEI x86 64bit/MS Window
+-------------------------------------------------------------------------------
+by Aldo Vecchietti, Director del Instituto INGAR,
+   CONICET, UTN, Santa Fe, Argentina
+by Ignacio E. Grossmann, Chemical Engineering Faculty,
+   Carnegie Mellon University, Pittsburgh, PA, USA
+-------------------------------------------------------------------------------
+Reading parameter(s) from "C:\Users\javal\Desktop\Spring_23\APSE\Project\dicopt.opt"
+>>  stop	1
+>>  maxcycles	1000
+Finished reading from "C:\Users\javal\Desktop\Spring_23\APSE\Project\dicopt.opt"
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 797 variables and 762 constraints
+    with 2211 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147483647 to 1000000000.
+ 
+                   Pre-triangular equations:   0
+                   Post-triangular equations:  79
+                   Definitional equations:     154
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.103 seconds
+   of which: Function evaluations             0.018 = 17.5%
+             1st Derivative evaluations       0.001 =  1.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  1.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:          1193.521446    (111 iterations)
+Best possible:        1193.521446
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 797 variables and 762 constraints
+    with 2211 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147483361 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  105
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.078 seconds
+   of which: Function evaluations             0.011 = 14.1%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.003 =  3.8%
+ 
+--- DICOPT: Stopped on crossover
+
+      The search was stopped because a crossover occurred.
+      The bound provided by the MIP master problem exceeds or
+      is within optcr of the objective value of the incumbent.
+
+--- DICOPT: Best integer solution found: 1193.521446
+
+
+**** REPORT SUMMARY :        0     NONOPT
+                             0 INFEASIBLE
+                             0  UNBOUNDED
+                             0     ERRORS
+                            25  PROJECTED
+GAMS 36.1.0  r2c0a44a Released Aug  2, 2021 WEX-WEI x86 64bit/MS Windows - 04/28/23 05:59:23 Page 4
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Model Statistics    SOLVE SPLogit Using MINLP From line 556
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          26     SINGLE EQUATIONS          750
+BLOCKS OF VARIABLES          23     SINGLE VARIABLES          785
+NON ZERO ELEMENTS         2,175     NON LINEAR N-Z             12
+CODE LENGTH                 129     CONSTANT POOL              40     DISCRETE VARIABLES         60
+
+
+GENERATION TIME      =        0.015 SECONDS      4 MB  36.1.0 r2c0a44a WEX-WEI
+GAMS 36.1.0  r2c0a44a Released Aug  2, 2021 WEX-WEI x86 64bit/MS Windows - 04/28/23 05:59:23 Page 5
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE SPLogit Using MINLP From line 556
+
+
+               S O L V E      S U M M A R Y
+
+     MODEL   SPLogit             OBJECTIVE  PROFIT
+     TYPE    MINLP               DIRECTION  MAXIMIZE
+     SOLVER  DICOPT              FROM LINE  556
+
+**** SOLVER STATUS     1 Normal Completion
+**** MODEL STATUS      8 Integer Solution
+**** OBJECTIVE VALUE              860.3136
+
+ RESOURCE USAGE, LIMIT         21.240     21600.000
+ ITERATION COUNT, LIMIT     83951    2147483647
+ EVALUATION ERRORS              0             0
+-------------------------------------------------------------------------------
+Dicopt 2         36.1.0 r2c0a44a Released Aug  2, 2021 WEI x86 64bit/MS Window
+-------------------------------------------------------------------------------
+by Aldo Vecchietti, Director del Instituto INGAR,
+   CONICET, UTN, Santa Fe, Argentina
+by Ignacio E. Grossmann, Chemical Engineering Faculty,
+   Carnegie Mellon University, Pittsburgh, PA, USA
+-------------------------------------------------------------------------------
+Reading parameter(s) from "C:\Users\javal\Desktop\Spring_23\APSE\Project\dicopt.opt"
+>>  stop	1
+>>  maxcycles	1000
+Finished reading from "C:\Users\javal\Desktop\Spring_23\APSE\Project\dicopt.opt"
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147483647 to 1000000000.
+ 
+                   Pre-triangular equations:   0
+                   Post-triangular equations:  79
+                   Definitional equations:     154
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.046 seconds
+   of which: Function evaluations             0.003 =  6.5%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  2.2%
+             Directional 2nd Derivative       0.001 =  2.2%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           965.867002    (101 iterations)
+Best possible:         965.867002
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147483428 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  111
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.026 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  3.8%
+             2nd Derivative evaluations       0.002 =  7.7%
+             Directional 2nd Derivative       0.005 = 19.2%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.525518    (102 iterations)
+Best possible:         925.525518
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147483111 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.025 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  4.0%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.447866    (108 iterations)
+Best possible:         925.447866
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147482895 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.027 seconds
+   of which: Function evaluations             0.002 =  7.4%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.002 =  7.4%
+             Directional 2nd Derivative       0.003 = 11.1%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.447866    (111 iterations)
+Best possible:         925.447866
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147482672 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.001 =  5.9%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.447866    (111 iterations)
+Best possible:         925.447866
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147482415 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.022 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.005 = 22.7%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.004 = 18.2%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.447866    (108 iterations)
+Best possible:         925.447866
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147482157 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.019 seconds
+   of which: Function evaluations             0.001 =  5.3%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.447866    (108 iterations)
+Best possible:         925.447866
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147481900 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.032 seconds
+   of which: Function evaluations             0.002 =  6.3%
+             1st Derivative evaluations       0.003 =  9.4%
+             2nd Derivative evaluations       0.001 =  3.1%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.441164    (111 iterations)
+Best possible:         925.441164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147481624 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.023 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 =  8.7%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.441164    (108 iterations)
+Best possible:         925.441164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147481352 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.020 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.441164    (108 iterations)
+Best possible:         925.441164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147481086 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.019 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.441164    (108 iterations)
+Best possible:         925.441164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147480720 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.022 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.441164    (111 iterations)
+Best possible:         925.441164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147480338 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.023 seconds
+   of which: Function evaluations             0.001 =  4.3%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  4.3%
+             Directional 2nd Derivative       0.001 =  4.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           925.438164    (98 iterations)
+Best possible:         925.438164
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147479983 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  109
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.031 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  3.2%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  3.2%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           897.828098    (101 iterations)
+Best possible:         897.828098
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147479541 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.031 seconds
+   of which: Function evaluations             0.002 =  6.5%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  3.2%
+             Directional 2nd Derivative       0.003 =  9.7%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.078706    (100 iterations)
+Best possible:         893.078706
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147478918 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.022 seconds
+   of which: Function evaluations             0.002 =  9.1%
+             1st Derivative evaluations       0.001 =  4.5%
+             2nd Derivative evaluations       0.001 =  4.5%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.078706    (117 iterations)
+Best possible:         893.078706
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147478249 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.028 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  3.6%
+             Directional 2nd Derivative       0.006 = 21.4%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.078706    (100 iterations)
+Best possible:         893.078706
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147477606 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.022 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  4.5%
+             Directional 2nd Derivative       0.002 =  9.1%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.078706    (100 iterations)
+Best possible:         893.078706
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147476925 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  6.3%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.078706    (117 iterations)
+Best possible:         893.078706
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147476248 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.021 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  4.8%
+             Directional 2nd Derivative       0.005 = 23.8%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.069004    (90 iterations)
+Best possible:         893.069004
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147475570 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.020 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  5.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.005 = 25.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           893.069004    (109 iterations)
+Best possible:         893.069004
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147474794 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.032 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.002 =  6.2%
+             2nd Derivative evaluations       0.003 =  9.4%
+             Directional 2nd Derivative       0.001 =  3.1%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           879.943687    (104 iterations)
+Best possible:         879.943687
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147474065 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.037 seconds
+   of which: Function evaluations             0.002 =  5.4%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  2.7%
+             Directional 2nd Derivative       0.001 =  2.7%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           879.127495    (129 iterations)
+Best possible:         879.127495
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147473203 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.020 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.004 = 20.0%
+             Directional 2nd Derivative       0.002 = 10.0%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           875.815117    (118 iterations)
+Best possible:         875.815117
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147472326 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.030 seconds
+   of which: Function evaluations             0.002 =  6.7%
+             1st Derivative evaluations       0.001 =  3.3%
+             2nd Derivative evaluations       0.002 =  6.7%
+             Directional 2nd Derivative       0.003 = 10.0%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           873.263578    (116 iterations)
+Best possible:         873.263578
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147471454 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  105
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  7.1%
+             Directional 2nd Derivative       0.002 = 14.3%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.818397    (110 iterations)
+Best possible:         870.818397
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147470537 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.019 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.004 = 21.1%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.818397    (110 iterations)
+Best possible:         870.818397
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147469360 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  6.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.818397    (110 iterations)
+Best possible:         870.818397
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147468172 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.001 =  6.2%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.003 = 18.8%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.818397    (125 iterations)
+Best possible:         870.818397
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147466943 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.008 = 66.7%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.818397    (125 iterations)
+Best possible:         870.818397
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147465408 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.019 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  5.3%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  5.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.811694    (109 iterations)
+Best possible:         870.811694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147463735 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.020 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  5.0%
+             Directional 2nd Derivative       0.002 = 10.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.811694    (109 iterations)
+Best possible:         870.811694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147462592 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.811694    (125 iterations)
+Best possible:         870.811694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147461591 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.001 =  5.9%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.811694    (125 iterations)
+Best possible:         870.811694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147460673 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.018 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.811694    (109 iterations)
+Best possible:         870.811694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147459772 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 16.7%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           870.808694    (116 iterations)
+Best possible:         870.808694
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147458380 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  110
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.018 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  5.6%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           866.485975    (122 iterations)
+Best possible:         866.485975
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147457280 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.031 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 =  6.5%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.126643    (148 iterations)
+Best possible:         865.126643
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147456023 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  5.9%
+             Directional 2nd Derivative       0.001 =  5.9%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.126643    (148 iterations)
+Best possible:         865.126643
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147454738 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.018 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.126643    (148 iterations)
+Best possible:         865.126643
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147453238 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.015 seconds
+   of which: Function evaluations             0.001 =  6.7%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  6.7%
+             Directional 2nd Derivative       0.002 = 13.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.126643    (148 iterations)
+Best possible:         865.126643
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147452004 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.015 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.126643    (148 iterations)
+Best possible:         865.126643
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147450774 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 12.5%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.014774    (148 iterations)
+Best possible:         865.014774
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147449348 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.004 = 25.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.007 = 43.7%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.014774    (148 iterations)
+Best possible:         865.014774
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147448029 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.014774    (148 iterations)
+Best possible:         865.014774
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147446561 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.001 =  5.9%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.014774    (148 iterations)
+Best possible:         865.014774
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147445113 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           865.014774    (148 iterations)
+Best possible:         865.014774
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147443556 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.013 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 15.4%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147442005 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  6.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147440703 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.013 seconds
+   of which: Function evaluations             0.001 =  7.7%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  7.7%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (136 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147439037 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.002 = 12.5%
+             1st Derivative evaluations       0.001 =  6.3%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  6.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147437428 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 14.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (136 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147435758 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  6.3%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 12.5%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (136 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147434192 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147432687 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.013 seconds
+   of which: Function evaluations             0.001 =  7.7%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147431067 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  8.3%
+             Directional 2nd Derivative       0.001 =  8.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (142 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147429337 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.012 seconds
+   of which: Function evaluations             0.001 =  8.3%
+             1st Derivative evaluations       0.001 =  8.3%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 16.7%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.898221    (136 iterations)
+Best possible:         864.898221
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147427671 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.001 =  7.1%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 14.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           864.577766    (123 iterations)
+Best possible:         864.577766
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147426208 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.035 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  2.9%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.003 =  8.6%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           863.560101    (146 iterations)
+Best possible:         863.560101
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147424969 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.021 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  4.8%
+             2nd Derivative evaluations       0.001 =  4.8%
+             Directional 2nd Derivative       0.004 = 19.0%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           862.447994    (172 iterations)
+Best possible:         862.447994
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147423596 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.001 =  5.9%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           862.447994    (161 iterations)
+Best possible:         862.447994
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147422209 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.015 seconds
+   of which: Function evaluations             0.001 =  6.7%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 13.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           862.447994    (172 iterations)
+Best possible:         862.447994
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147420795 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.009 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           862.447994    (172 iterations)
+Best possible:         862.447994
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147419391 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.011 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           862.447994    (161 iterations)
+Best possible:         862.447994
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147417808 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.003 = 18.8%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.474443    (143 iterations)
+Best possible:         861.474443
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147416259 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.020 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  5.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.474443    (128 iterations)
+Best possible:         861.474443
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147414535 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.014 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 14.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.474443    (128 iterations)
+Best possible:         861.474443
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147412855 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.019 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.001 =  5.3%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.467741    (128 iterations)
+Best possible:         861.467741
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147411225 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.002 = 11.8%
+             Directional 2nd Derivative       0.002 = 11.8%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.467741    (143 iterations)
+Best possible:         861.467741
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147409625 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.001 =  6.3%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.002 = 12.5%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.467741    (128 iterations)
+Best possible:         861.467741
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147407990 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.001 =  5.9%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.003 = 17.6%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.438785    (118 iterations)
+Best possible:         861.438785
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147406202 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.016 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.438785    (127 iterations)
+Best possible:         861.438785
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147404600 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.000 =  0.0%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.001 =  5.9%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.438785    (127 iterations)
+Best possible:         861.438785
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147403073 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  107
+                   Definitional equations:     142
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.017 seconds
+   of which: Function evaluations             0.005 = 29.4%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.000 =  0.0%
+ 
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           861.253705    (108 iterations)
+Best possible:         861.253705
+Absolute gap:           -0.000000
+Relative gap:            0.000000
+--- DICOPT: Setting up next NLP
+ 
+ 
+    C O N O P T 3   version 3.17K
+    Copyright (C)   ARKI Consulting and Development A/S
+                    Bagsvaerdvej 246 A
+                    DK-2880 Bagsvaerd, Denmark
+ 
+ 
+    The model has 785 variables and 750 constraints
+    with 2175 Jacobian elements, 12 of which are nonlinear.
+    The Hessian of the Lagrangian has 12 elements on the diagonal,
+    0 elements below the diagonal, and 12 nonlinear variables.
+ 
+ ** Warning **  The value of LFITER is out of range.
+                LFITER is decreased from 2147401381 to 1000000000.
+ 
+                   Pre-triangular equations:   69
+                   Post-triangular equations:  106
+                   Definitional equations:     143
+ 
+ 
+ ** Optimal solution. Reduced gradient less than tolerance.
+ 
+ 
+ CONOPT time Total                            0.026 seconds
+   of which: Function evaluations             0.002 =  7.7%
+             1st Derivative evaluations       0.000 =  0.0%
+             2nd Derivative evaluations       0.000 =  0.0%
+             Directional 2nd Derivative       0.004 = 15.4%
+ 
+--- GMO Resort Time 0ms
+GAMS/Gurobi demo/community requires a Gurobi license from Gurobi Optimization.
+Gurobi library version 9.1.2
+Space for names approximately 0.05 Mb
+MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Fixed MIP status(2): Model was solved to optimality (subject to tolerances).
+
+Final Solve:           860.313615    (109 iterations)
+Best possible:         860.313615
+Absolute gap:            0.000000
+Relative gap:            0.000000
+--- DICOPT: Stopped on crossover
+
+      The search was stopped because a crossover occurred.
+      The bound provided by the MIP master problem exceeds or
+      is within optcr of the objective value of the incumbent.
+
+--- DICOPT: Best integer solution found: 860.313614
+
+
+**** REPORT SUMMARY :        0     NONOPT
+                             0 INFEASIBLE
+                             0  UNBOUNDED
+                             0     ERRORS
+                            17  PROJECTED
+
+
+EXECUTION TIME       =       23.391 SECONDS      4 MB  36.1.0 r2c0a44a WEX-WEI
+
+
+USER: Prof. Ignacio E. Grossmann                     G221207|0002AS-GEN
+      Carnegie Mellon University, Dept. of Chemical Engineering  DCE375
+      License for teaching and research at degree granting institutions
+
+
+**** FILE SUMMARY
+
+Input      C:\Users\javal\Desktop\Spring_23\APSE\Project\AA.gms
+Output     C:\Users\javal\Desktop\Spring_23\APSE\Project\AA.lst
